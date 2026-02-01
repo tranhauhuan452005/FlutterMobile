@@ -1,0 +1,57 @@
+name: pcm_311_mobile
+description: "PCM 311 Padel Club Management Mobile App"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # HTTP & API
+  http: ^1.1.0
+  dio: ^5.4.0
+  
+  # State Management
+  provider: ^6.1.1
+  riverpod: ^2.4.9
+  flutter_riverpod: ^2.4.9
+  
+  # Navigation
+  go_router: ^12.1.3
+  
+  # Storage & Security
+  flutter_secure_storage: ^9.0.0
+  shared_preferences: ^2.2.2
+  
+  # SignalR
+  signalr_netcore: ^1.3.7
+  
+  # UI Components
+  intl: ^0.19.0
+  table_calendar: ^3.0.9
+  fl_chart: ^0.66.0
+  image_picker: ^1.0.4
+  cached_network_image: ^3.3.0
+  
+  # Utils
+  permission_handler: ^11.1.0
+  path_provider: ^2.1.1
+  
+  # Icons & Fonts
+  cupertino_icons: ^1.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/icons/

@@ -1,0 +1,19 @@
+[Unit]
+Description=.NET Web API Backend PCM 311
+After=network.target
+
+[Service]
+WorkingDirectory=/var/www/backend
+ExecStart=/var/www/backend/PCM.Backend
+Restart=always
+# Restart service after 10 seconds if the dotnet service crashes:
+RestartSec=10
+KillSignal=SIGINT
+SyslogIdentifier=pcm-backend
+User=root
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+Environment=ASPNETCORE_URLS=http://*:5244
+
+[Install]
+WantedBy=multi-user.target

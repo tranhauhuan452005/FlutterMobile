@@ -1,0 +1,254 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using PCM.Backend.Data;
+using PCM.Backend.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace PCM.Backend.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize]
+    public class AdminController : ControllerBase
+    {
+        private readonly ApplicationDbContext _context;
+        private readonly ILogger<AdminController> _logger;
+
+        public AdminController(ApplicationDbContext context, ILogger<AdminController> logger)
+        {
+            _context = context;
+            _logger = logger;
+        }
+
+        /// <summary>
+        /// Get revenue report
+        /// </summary>
+        [HttpGet("revenue")]
+        public async Task<IActionResult> GetRevenueReport()
+        {
+            try
+            {
+                // Get all confirmed bookings
+                var bookings = await _context.Set<Booking311>()
+                    .Where(b => b.Status == "CONFIRMED")
+                    .ToListAsync();
+
+                var totalBookingRevenue = bookings.Sum(b => b.TotalPrice);
+
+                // Get all wallet transactions (topups)
+                var transactions = await _context.Set<WalletTransaction311>()
+                    .Where(t => t.TransactionType == "TOPUP")
+                    .ToListAsync();
+
+                var totalTopupAmount = transactions.Sum(t => t.Amount);
+
+                // Get unique users
+                var uniqueUsers = bookings.Select(b => b.UserId).Distinct().Count();
+                var uniqueTopupUsers = transactions.Select(t => t.UserId).Distinct().Count();
+
+                return Ok(new
+                {
+                    success = true,
+                    revenueReport = new
+                    {
+                        // Booking Revenue
+                        totalBookingRevenue = totalBookingRevenue,
+                        totalBookings = bookings.Count,
+                        averageBookingPrice = bookings.Count > 0 ? totalBookingRevenue / bookings.Count : 0,
+                        
+                        // Topup Revenue
+                        totalTopupAmount = totalTopupAmount,
+                        totalTopupTransactions = transactions.Count,
+                        averageTopupAmount = transactions.Count > 0 ? totalTopupAmount / transactions.Count : 0,
+                        
+                        // Combined
+                        totalRevenue = totalBookingRevenue + totalTopupAmount,
+                        uniqueUsers = uniqueUsers,
+                        uniqueTopupUsers = uniqueTopupUsers,
+                        
+                        reportDate = DateTime.UtcNow
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Get revenue report error: {ex.Message}");
+                return StatusCode(500, new { success = false, message = "Error retrieving revenue report" });
+            }
+        }
+
+        /// <summary>
+        /// Get all bookings (admin)
+        /// </summary>
+        [HttpGet("bookings")]
+        public async Task<IActionResult> GetAllBookings()
+        {
+            try
+            {
+                var bookings = await _context.Set<Booking311>()
+                    .OrderByDescending(b => b.CreatedDate)
+                    .ToListAsync();
+
+                return Ok(new
+                {
+                    success = true,
+                    totalBookings = bookings.Count,
+                    bookings = bookings.Select(b => new
+                    {
+                        bookingId = b.Id,
+                        userId = b.UserId,
+                        courtId = b.CourtId,
+                        bookingDate = b.BookingDate,
+                        startTime = b.StartTime,
+                        endTime = b.EndTime,
+                        totalPrice = b.TotalPrice,
+                        status = b.Status,
+                        createdDate = b.CreatedDate
+                    }).ToList()
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Get all bookings error: {ex.Message}");
+                return StatusCode(500, new { success = false, message = "Error retrieving bookings" });
+            }
+        }
+
+        /// <summary>
+        /// Get wallet statistics
+        /// </summary>
+        [HttpGet("wallets")]
+        public async Task<IActionResult> GetWalletStatistics()
+        {
+            try
+            {
+                var transactions = await _context.Set<WalletTransaction311>().ToListAsync();
+
+                // Group by transaction type
+                var topupTransactions = transactions.Where(t => t.TransactionType == "TOPUP").ToList();
+                var deductTransactions = transactions.Where(t => t.TransactionType == "DEDUCT").ToList();
+
+                var totalTopup = topupTransactions.Sum(t => t.Amount);
+                var totalDeduct = deductTransactions.Sum(t => t.Amount);
+
+                // Get unique users with transactions
+                var usersWithTransactions = transactions.Select(t => t.UserId).Distinct().Count();
+
+                // Top up users
+                var topUpUsers = topupTransactions
+                    .GroupBy(t => t.UserId)
+                    .Select(g => new
+                    {
+                        userId = g.Key,
+                        totalTopupAmount = g.Sum(t => t.Amount),
+                        transactionCount = g.Count()
+                    })
+                    .OrderByDescending(u => u.totalTopupAmount)
+                    .Take(10)
+                    .ToList();
+
+                return Ok(new
+                {
+                    success = true,
+                    walletStatistics = new
+                    {
+                        totalTransactions = transactions.Count,
+                        totalTopupAmount = totalTopup,
+                        totalDeductAmount = totalDeduct,
+                        netWalletBalance = totalTopup - totalDeduct,
+                        usersWithTransactions = usersWithTransactions,
+                        topupTransactions = topupTransactions.Count,
+                        deductTransactions = deductTransactions.Count,
+                        topUpUsers = topUpUsers,
+                        reportDate = DateTime.UtcNow
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Get wallet statistics error: {ex.Message}");
+                return StatusCode(500, new { success = false, message = "Error retrieving wallet statistics" });
+            }
+        }
+
+        /// <summary>
+        /// Get user statistics
+        /// </summary>
+        [HttpGet("users")]
+        public async Task<IActionResult> GetUserStatistics()
+        {
+            try
+            {
+                var bookings = await _context.Set<Booking311>().ToListAsync();
+                var transactions = await _context.Set<WalletTransaction311>().ToListAsync();
+
+                var bookingUsers = bookings.Select(b => b.UserId).Distinct();
+                var transactionUsers = transactions.Select(t => t.UserId).Distinct();
+                var allUsers = bookingUsers.Union(transactionUsers).Count();
+
+                var averageBookingsPerUser = bookings.Count > 0 ? (double)bookings.Count / allUsers : 0;
+                var averageSpendPerUser = bookings.Count > 0 
+                    ? bookings.Sum(b => b.TotalPrice) / allUsers 
+                    : 0;
+
+                return Ok(new
+                {
+                    success = true,
+                    userStatistics = new
+                    {
+                        totalUsers = allUsers,
+                        usersWithBookings = bookingUsers.Count(),
+                        usersWithTopup = transactionUsers.Count(),
+                        averageBookingsPerUser = Math.Round(averageBookingsPerUser, 2),
+                        averageSpendPerUser = Math.Round(averageSpendPerUser, 2),
+                        totalBookings = bookings.Count,
+                        totalTransactions = transactions.Count,
+                        reportDate = DateTime.UtcNow
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Get user statistics error: {ex.Message}");
+                return StatusCode(500, new { success = false, message = "Error retrieving user statistics" });
+            }
+        }
+
+        /// <summary>
+        /// Get transaction history (admin)
+        /// </summary>
+        [HttpGet("transactions")]
+        public async Task<IActionResult> GetTransactionHistory()
+        {
+            try
+            {
+                var transactions = await _context.Set<WalletTransaction311>()
+                    .OrderByDescending(t => t.CreatedDate)
+                    .Take(100)
+                    .ToListAsync();
+
+                return Ok(new
+                {
+                    success = true,
+                    totalRecords = transactions.Count,
+                    transactions = transactions.Select(t => new
+                    {
+                        transactionId = t.Id,
+                        userId = t.UserId,
+                        type = t.TransactionType,
+                        amount = t.Amount,
+                        balanceBefore = t.BalanceBefore,
+                        balanceAfter = t.BalanceAfter,
+                        description = t.Description,
+                        createdDate = t.CreatedDate
+                    }).ToList()
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Get transaction history error: {ex.Message}");
+                return StatusCode(500, new { success = false, message = "Error retrieving transactions" });
+            }
+        }
+    }
+}
